@@ -1,0 +1,35 @@
+# GitHub Actions Workflow for Building Hybrid Termux APK (Self-Contained)
+name: Android APK Build (Self-Contained Script)
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build_apk:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: ၁။ ကုဒ်များကို ရယူခြင်း (Checkout Code)
+        uses: actions/checkout@v4
+
+      - name: ၂။ Build Tools များ စနစ်ထည့်သွင်းခြင်း (Node.js, JDK, Zip)
+        run: |
+          sudo apt update
+          sudo apt install -y nodejs npm default-jdk zip 
+          
+      - name: ၃။ Self-Contained APK Build Tool ကို စနစ်ထည့်သွင်းခြင်း
+        # build_apk.sh ကို Execute လုပ်ရန် ခွင့်ပြုချက် ပေးခြင်း
+        chmod +x build_apk.sh
+          
+      - name: ၄။ Self-Contained Script ဖြင့် APK ဖိုင်ကို တည်ဆောက်ခြင်း
+        run: ./build_apk.sh
+          
+      - name: ၅။ APK ဖိုင်ကို Artifact အဖြစ် သိမ်းဆည်းခြင်း
+        uses: actions/upload-artifact@v4
+        with:
+          name: ocr-scanner-csv-apk
+          path: ./OcrScannerCSV.apk
+          retention-days: 7
