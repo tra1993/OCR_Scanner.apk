@@ -1,5 +1,5 @@
 #!/bin/bash
-# Self-Contained APK Build Script (Using AAPT for Robust Packaging)
+# Self-Contained APK Build Script (Dynamic Path & AAPT Fix)
 
 # ၁။ သတ်မှတ်ချက်များ (Configuration)
 APP_NAME="OcrScannerCSV"
@@ -16,7 +16,7 @@ UNSIGNED_APK="$BUILD_DIR/$APP_NAME-unsigned.apk"
 SIGNED_APK="$BUILD_DIR/$APP_NAME-signed.apk"
 FINAL_APK="$APP_NAME.apk"
 
-echo "--- OCR Scanner APK Build စတင်သည် (AAPT ဖြင့်) ---"
+echo "--- OCR Scanner APK Build စတင်သည် (Final Fix) ---"
 
 # ဖိုဒါများကို ရှင်းလင်း ဖန်တီးခြင်း
 rm -rf $BUILD_DIR
@@ -27,31 +27,40 @@ mkdir -p $BUILD_DIR/assets/www
 cp -r $ASSETS_DIR/* $BUILD_DIR/assets/www/
 
 # ============================================
-# ၂။ AAPT ဖြင့် APK အား Package လုပ်ခြင်း (Unsigned/Unaligned APK ကို ဖန်တီးခြင်း)
-# *aapt ကို GitHub Actions runner တွင် တွေ့ရမည်ဟု ယူဆသည်*
+# ၂။ Android SDK Platform Path ကို ရှာဖွေခြင်း (Dynamic Platform Path)
+# ============================================
+echo "Searching for android.jar..."
+
+# Ubuntu Runner တွင် android-sdk package ထည့်သွင်းရာမှ ရရှိသော Path ကို ရှာဖွေသည်
+# find ကို အသုံးပြု၍ /usr/lib/android-sdk/platforms နေရာမှ android-jar ကို ရှာဖွေသည်
+ANDROID_PLATFORM_DIR=$(find /usr/lib/android-sdk/platforms -maxdepth 1 -type d -name "android-*" | sort -V | tail -n 1)
+
+if [ -z "$ANDROID_PLATFORM_DIR" ]; then
+    echo "ERROR: Android Platform SDK folder မတွေ့ရှိပါ။"
+    echo "Check if 'android-sdk' package installed correctly."
+    exit 1
+fi
+
+ANDROID_JAR="$ANDROID_PLATFORM_DIR/android.jar"
+echo "Found Android Platform JAR at: $ANDROID_JAR"
+
+# ============================================
+# ၃။ AAPT ဖြင့် APK အား Package လုပ်ခြင်း
 # ============================================
 echo "Building package using aapt..."
 
-# aapt ဖြင့် assets များကို APK ထဲသို့ ထုပ်ပိုးခြင်း
-# -f: Overwrite output file
-# -M: AndroidManifest.xml path
-# -A: Assets folder path
-# -I: Android platform libraries path (GitHub Actions environment တွင် အလိုအလျောက် ရယူပါသည်)
-# -F: Output APK file
-# -S: Resources folder (ဤသည်မှာ Webview အတွက် မလိုအပ်ပါ)
 aapt package -f -M $MANIFEST_FILE \
     -A $BUILD_DIR/assets \
-    -I /usr/lib/android-sdk/platforms/android-33/android.jar \
+    -I $ANDROID_JAR \
     -F $UNSIGNED_APK 
 
-# aapt မအောင်မြင်ပါက error ပြရန်
 if [ $? -ne 0 ]; then
     echo "ERROR: AAPT packaging failed. Check Android SDK setup."
     exit 1
 fi
 
 # ============================================
-# ၃။ Keytool ဖြင့် Signing Key ဖန်တီးခြင်း (ပထမဆုံးအကြိမ်အတွက်)
+# ၄။ Keytool ဖြင့် Signing Key ဖန်တီးခြင်း
 # ============================================
 if [ ! -f "$KEY_FILE" ]; then
     echo "Signing Key အသစ် ဖန်တီးနေသည်..."
@@ -59,18 +68,18 @@ if [ ! -f "$KEY_FILE" ]; then
 fi
 
 # ============================================
-# ၄။ Jarsigner ဖြင့် APK ကို လက်မှတ်ထိုးခြင်း (Sign)
+# ၅။ Jarsigner ဖြင့် APK ကို လက်မှတ်ထိုးခြင်း (Sign)
 # ============================================
 echo "APK အား လက်မှတ်ထိုးနေသည် (Signing)..."
 jarsigner -verbose -sigalg SHA1withRSA -digestalg SHA1 -keystore $KEY_FILE -storepass android -keypass android $UNSIGNED_APK mykey
 mv $UNSIGNED_APK $SIGNED_APK
 
 # ============================================
-# ၅။ Zipalign ဖြင့် APK ကို Optimized လုပ်ခြင်း (Installability အတွက် မရှိမဖြစ်လိုအပ်သည်)
+# ၆။ Zipalign ဖြင့် APK ကို Optimized လုပ်ခြင်း
 # ============================================
 echo "APK အား Zipalign ဖြင့် Optimized လုပ်နေသည်..."
-# Zipalign ကို အသုံးပြု၍ APK ကို Memory-aligned ပြုလုပ်ခြင်း
-# zipalign ကို GitHub Actions တွင် ထည့်သွင်းထားသည်ဟု ယူဆသည်
+
+# Zipalign ကို အသုံးပြု၍ APK ကို Optimized လုပ်ခြင်း
 zipalign -f 4 $SIGNED_APK $FINAL_APK
 
 echo "--- APK တည်ဆောက်မှု ပြီးမြောက်ပါပြီ။ $FINAL_APK ကို ရယူနိုင်ပါသည်။ ---"
