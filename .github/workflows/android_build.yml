@@ -9,7 +9,7 @@ on:
 jobs:
   build_apk:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: ၁။ ကုဒ်များကို ရယူခြင်း (Checkout Code)
         uses: actions/checkout@v4
@@ -19,26 +19,24 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-        
-      - name: ၃။ Android SDK Tools ကို ထည့်သွင်းခြင်း (sdkmanager ပါဝင်သည်)
+
+      - name: ၃။ Android SDK (API 34) ကို ထည့်သွင်းခြင်း
         uses: android-actions/setup-android@v3
         with:
-          api-level: 33
-          build-tools: 33.0.0
-          sdk-tools: latest
-          
+          api-level: 34
+          build-tools: 34.0.0
+          packages: platform-tools, platforms;android-34
+
       - name: ၄။ Build Essentials (Zip, Node) နှင့် Script ခွင့်ပြုချက် ပေးခြင်း
         run: |
-          # Nodejs/Zip/apt packages များကို ထည့်သွင်းခြင်း
           sudo apt update
           sudo apt install -y nodejs npm zip
-          
-          # Build Script ကို Execute လုပ်ရန် ခွင့်ပြုချက် ပေးခြင်း
+
           chmod +x build_apk.sh
-          
+
       - name: ၅။ Self-Contained Script ဖြင့် APK ဖိုင်ကို တည်ဆောက်ခြင်း
         run: ./build_apk.sh
-          
+
       - name: ၆။ APK ဖိုင်ကို Artifact အဖြစ် သိမ်းဆည်းခြင်း
         uses: actions/upload-artifact@v4
         with:

@@ -27,26 +27,16 @@ cp -r $ASSETS_DIR/* $BUILD_DIR/assets/www/
 # ============================================
 # ၂။ Android SDK Platform Path ကို စစ်ဆေးခြင်း
 # ============================================
-echo "DEBUG: $ANDROID_SDK_ROOT Environment Variable Value:"
-echo $ANDROID_SDK_ROOT
+echo "Finding available android.jar ..."
 
-ANDROID_PLATFORM_JAR="$ANDROID_SDK_ROOT/platforms/$ANDROID_API_LEVEL/android.jar"
-
-echo "Checking for Android Platform JAR at: $ANDROID_PLATFORM_JAR"
+ANDROID_PLATFORM_JAR=$(find "$ANDROID_SDK_ROOT/platforms" -maxdepth 2 -name "android.jar" | head -n 1)
 
 if [ ! -f "$ANDROID_PLATFORM_JAR" ]; then
-    echo "ERROR: Android Platform JAR မတွေ့ရှိပါ။ ($ANDROID_PLATFORM_JAR)"
-    echo "========================================================"
-    echo "DEBUG: 'platforms' directory contents:"
-    ls -l $ANDROID_SDK_ROOT/platforms/ # directories များကို စစ်ဆေးခြင်း
-    echo "DEBUG: 'android-33' directory contents:"
-    ls -l $ANDROID_SDK_ROOT/platforms/$ANDROID_API_LEVEL/ # android-33 directory အတွင်းရှိ ဖိုင်များကို စစ်ဆေးခြင်း
-    echo "This indicates that 'platforms;android-33' component was not downloaded correctly."
-    echo "========================================================"
+    echo "ERROR: android.jar ကို platforms folder ထဲမှာ မတွေ့ရှိနိုင်ဘူး!"
     exit 1
 fi
 
-echo "Using Platform JAR at: $ANDROID_PLATFORM_JAR"
+echo "USING ANDROID JAR: $ANDROID_PLATFORM_JAR"
 
 # ============================================
 # ၃။ AAPT ဖြင့် APK အား Package လုပ်ခြင်း
