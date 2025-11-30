@@ -1,5 +1,5 @@
-# GitHub Actions Workflow for Building Hybrid Termux APK (Self-Contained)
-name: Android APK Build (Self-Contained Script)
+# GitHub Actions Workflow for Building Hybrid Termux APK (Robust Packaging)
+name: Android APK Build (Robust Packaging)
 
 on:
   push:
@@ -15,14 +15,21 @@ jobs:
       - name: ၁။ ကုဒ်များကို ရယူခြင်း (Checkout Code)
         uses: actions/checkout@v4
 
-      - name: ၂။ Build Tools များ စနစ်ထည့်သွင်းခြင်း (Node.js, JDK, Zip)
+      - name: ၂။ Android SDK Tools နှင့် JDK ကို ထည့်သွင်းခြင်း
+        # JDK 17 ကို Install လုပ်ခြင်း
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+        
+      - name: ၃။ Android Build Essentials (AAPT, Zipalign) ထည့်သွင်းခြင်း
         run: |
+          # Build-tools (aapt, zipalign) ကို apt မှတဆင့် ထည့်သွင်းပြီး PATH သို့ ထည့်သွင်းခြင်း
           sudo apt update
-          sudo apt install -y nodejs npm default-jdk zip 
-          
-      - name: ၃။ Self-Contained APK Build Tool ကို စနစ်ထည့်သွင်းခြင်း
-        run: |
-          # build_apk.sh ကို Execute လုပ်ရန် ခွင့်ပြုချက် ပေးခြင်း (YAML error fix)
+          # android-sdk သည် aapt, zipalign များပါသော build-tools ကို ပံ့ပိုးပေးသည်
+          sudo apt install -y android-sdk zip nodejs npm
+
+          # Build Script ကို Execute လုပ်ရန် ခွင့်ပြုချက် ပေးခြင်း (YAML syntax error fix)
           chmod +x build_apk.sh
           
       - name: ၄။ Self-Contained Script ဖြင့် APK ဖိုင်ကို တည်ဆောက်ခြင်း
