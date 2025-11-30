@@ -1,46 +1,47 @@
-​name: Android APK Build (Final SDK Setup Fix)
-​on:
-push:
-branches:
-- main
-workflow_dispatch:
-​jobs:
-build_apk:
-runs-on: debian-latest
-steps:
-  - name: ၁။ ကုဒ်များကို ရယူခြင်း (Checkout Code)
-    uses: actions/checkout@v4
+name: Android APK Build (Final SDK Setup Fix)
 
-  - name: ၂။ Java 17 (JDK) ကို ထည့်သွင်းခြင်း
-    uses: actions/setup-java@v4
-    with:
-      distribution: 'temurin'
-      java-version: '17'
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build_apk:
+    runs-on: ubuntu-latest
     
-  - name: ၃။ Android SDK Tools ကို ထည့်သွင်းခြင်း (sdkmanager ပါဝင်သည်)
-    # sdkmanager ကို ရယူရန်နှင့် Build Tools များ ထည့်သွင်းရန်
-    uses: android-actions/setup-android@v3
-    with:
-      api-level: 33
-      build-tools: 33.0.0
-      sdk-tools: latest
-      
-  - name: ၄။ Build Essentials (Zip, Node) နှင့် Script ခွင့်ပြုချက် ပေးခြင်း
-    run: |
-      # Nodejs/Zip/apt packages များကို ထည့်သွင်းခြင်း
-      sudo apt update
-      sudo apt install -y nodejs npm zip
-      
-      # Build Script ကို Execute လုပ်ရန် ခွင့်ပြုချက် ပေးခြင်း
-      chmod +x build_apk.sh
-      
-  - name: ၅။ Self-Contained Script ဖြင့် APK ဖိုင်ကို တည်ဆောက်ခြင်း
-    run: ./build_apk.sh
-    # $ANDROID_SDK_ROOT ကို ဤအဆင့်မှ စတင်၍ သုံးနိုင်ပါပြီ။
-      
-  - name: ၆။ APK ဖိုင်ကို Artifact အဖြစ် သိမ်းဆည်းခြင်း
-    uses: actions/upload-artifact@v4
-    with:
-      name: ocr-scanner-csv-apk
-      path: ./OcrScannerCSV.apk
-      retention-days: 7
+    steps:
+      - name: ၁။ ကုဒ်များကို ရယူခြင်း (Checkout Code)
+        uses: actions/checkout@v4
+
+      - name: ၂။ Java 17 (JDK) ကို ထည့်သွင်းခြင်း
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+        
+      - name: ၃။ Android SDK Tools ကို ထည့်သွင်းခြင်း (sdkmanager ပါဝင်သည်)
+        uses: android-actions/setup-android@v3
+        with:
+          api-level: 33
+          build-tools: 33.0.0
+          sdk-tools: latest
+          
+      - name: ၄။ Build Essentials (Zip, Node) နှင့် Script ခွင့်ပြုချက် ပေးခြင်း
+        run: |
+          # Nodejs/Zip/apt packages များကို ထည့်သွင်းခြင်း
+          sudo apt update
+          sudo apt install -y nodejs npm zip
+          
+          # Build Script ကို Execute လုပ်ရန် ခွင့်ပြုချက် ပေးခြင်း
+          chmod +x build_apk.sh
+          
+      - name: ၅။ Self-Contained Script ဖြင့် APK ဖိုင်ကို တည်ဆောက်ခြင်း
+        run: ./build_apk.sh
+          
+      - name: ၆။ APK ဖိုင်ကို Artifact အဖြစ် သိမ်းဆည်းခြင်း
+        uses: actions/upload-artifact@v4
+        with:
+          name: ocr-scanner-csv-apk
+          path: ./OcrScannerCSV.apk
+          retention-days: 7
