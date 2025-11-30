@@ -21,11 +21,13 @@ jobs:
           java-version: '17'
 
       - name: ၃။ Android SDK (API 34) ကို ထည့်သွင်းခြင်း
-        uses: android-actions/setup-android@v3
-        with:
-          api-level: 34
-          build-tools: 34.0.0
-          packages: platform-tools, platforms;android-34
+  uses: android-actions/setup-android@v3
+  with:
+    accept-android-sdk-licenses: true
+    packages: |
+      platform-tools
+      build-tools;34.0.0
+      platforms;android-34
 
       - name: ၄။ Build Essentials (Zip, Node) နှင့် Script ခွင့်ပြုချက် ပေးခြင်း
         run: |
