@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="my">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCR Scanner (CSV Hybrid)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Padauk:wght@400;700&display=swap');
+        body { 
+            font-family: 'Padauk', sans-serif; 
+            margin: 0;
+            padding: 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="module">
+        import React, { useState, useEffect, useCallback } from 'https://cdn.skypack.dev/react@17.0.2?dts';
+        import ReactDOM from 'https://cdn.skypack.dev/react-dom@17.0.2?dts';
+        import { Upload, FileText, Loader2, XCircle, FileSpreadsheet } from 'https://cdn.skypack.dev/lucide-react?dts';
+        
+        const { createWorker } = window.Tesseract;
+
+        // OCR စာသား ခွဲခြမ်းစိတ်ဖြာခြင်း လုပ်ငန်းစဉ်
+        const parseOcrText = (text) => {
+            const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+            const finalData = [];
+            let tempDate = 'N/A';
+            
+            const dateRegex = /(\d{4}-\d{2}-\d{2})\s+([A-Za-z]+)/; 
+            const timeRegex = /(\d{1,2}:\d{2}\s+(AM|PM))/; 
+            
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                
+                const dateMatch = line.match(dateRegex);
+                if (dateMatch) {
+                    tempDate = dateMatch[1];
+                    continue;
+                }
+
+                const timeMatch = line.match(timeRegex);
+                if (timeMatch) {
+                    const entry = { Date: tempDate, Time: timeMatch[1].trim() };
+                    
+                    if (i + 1 < lines.length) {
+                        const dataLine = lines[i+1];
+                        
+                        const pairs = dataLine.match(/([A-Za-z]+)\s*([0-9.,]+)/g); 
+                        
+                        if (pairs) {
+                            pairs.forEach(pair => {
+                                const [key, value] = pair.split(/\s+/).filter(p => p.length > 0);
+                                if (key && value) {
+                                    entry[key] = value.replace(/,/g, '');
+                                }
+                            });
+                        }
+
+                        const extraTimeValueMatch = dataLine.match(/(\d{1,2}:\d{2}\s+PM)\s+([0-9.,]+)/);
+                         if (extraTimeValueMatch) {
+                             entry[extraTimeValueMatch[1].trim()] = extraTimeValueMatch[2].trim().replace(/,/g, ''); 
+                         }
+                         
+                         if (Object.keys(entry).length > 2) {
+                             finalData.push(entry);
+                         }
+                    }
+                }
+            }
+
+            return finalData;
+        };
+
+        // JSON မှ CSV သို့ ပြောင်းလဲခြင်း လုပ်ငန်းစဉ်
+        const convertToCsv = (data) => {
+            if (data.length === 0) return "";
+
+            let headersSet = new Set();
+            data.forEach(obj => {
+                Object.keys(obj).forEach(key => headersSet.add(key));
+            });
+            
+            const requiredHeaders = ['Date', 'Time'];
+            const otherHeaders = Array.from(headersSet).filter(h => !requiredHeaders.includes(h)).sort();
+            const finalHeaders = requiredHeaders.concat(otherHeaders);
+
+            const csvRows = [finalHeaders.join(',')];
+
+            for (const row of data) {
+                const values = finalHeaders.map(header => {
+                    let value = row[header] || '';
+                    value = String(value).replace(/"/g, '""');
+                    if (value.includes(',') || value.includes('\n') || value.includes('"')) {
+                        value = `"${value}"`;
+                    }
+                    return value;
+                });
+                csvRows.push(values.join(','));
+            }
+
+            return csvRows.join('\n');
+        };
+
+        const App = () => {
+          const [image, setImage] = useState(null);
+          const [ocrResult, setOcrResult] = useState('');
+          const [structuredData, setStructuredData] = useState([]);
+          const [isProcessing, setIsProcessing] = useState(false);
+          const [progress, setProgress] = useState(0);
+          const [error, setError] = useState('');
+          const [isWorkerReady, setIsWorkerReady] = useState(false);
+          const [worker, setWorker] = useState(null);
+
+          const APP_ID = 'ocr-scanner-csv-app';
+
+          const initializeWorker = useCallback(async () => {
+            try {
+              setError('');
+              const newWorker = await createWorker({
+                logger: m => {
+                  if (m.status === 'recognizing text') {
+                    setProgress(Math.round(m.progress * 100));
+                  }
+                },
+              });
+              await newWorker.loadLanguage('eng');
+              await newWorker.initialize('eng');
+              setWorker(newWorker);
+              setIsWorkerReady(true);
+            } catch (e) {
+              setError("OCR စနစ် စတင်ရာတွင် အမှားဖြစ်ပွားပါသည်။");
+            }
+          }, []);
+
+          useEffect(() => {
+            initializeWorker();
+            return () => {
+              if (worker) {
+                worker.terminate();
+              }
+            };
+          }, [initializeWorker]);
+
+
+          const handleImageChange = (event) => {
+            const file = event.target.files[0];
+            if (file) {
+              setImage(URL.createObjectURL(file));
+              setOcrResult('');
+              setStructuredData([]);
+              setError('');
+            }
+          };
+
+          const handleRecognize = async () => {
+            if (!image || !worker) {
+              setError("ပုံမရှိသေးပါ သို့မဟုတ် OCR စနစ် အသင့်မဖြစ်သေးပါ။");
+              return;
+            }
+
+            setIsProcessing(true);
+            setOcrResult('');
+            setStructuredData([]);
+            setProgress(0);
+            setError('');
+
+            try {
+              const { data: { text } } = await worker.recognize(image);
+              const cleanedText = text.trim();
+              setOcrResult(cleanedText);
+
+              const parsedData = parseOcrText(cleanedText);
+              setStructuredData(parsedData);
+
+              if (parsedData.length === 0 && cleanedText.length > 10) {
+                setError("OCR သည် စာသားများကို ထုတ်ယူနိုင်ခဲ့သော်လည်း ဖွဲ့စည်းပုံချရာတွင် အဆင်မပြေပါ။");
+              } else if (cleanedText.length === 0) {
+                 setError("OCR မှ မည်သည့်စာသားမျှ ထုတ်ယူနိုင်ခြင်း မရှိပါ။ ပုံ၏ ရှင်းလင်းမှုကို စစ်ဆေးပါ။");
+              }
+              
+            } catch (e) {
+              setError(`OCR ထုတ်ယူမှု မအောင်မြင်ပါ: ${e.message}`);
+            } finally {
+              setIsProcessing(false);
+            }
+          };
+          
+          const handleDownloadCsv = () => {
+            if (structuredData.length === 0) {
+                setError("CSV ဖိုင်ထုတ်ရန်အတွက် ဖွဲ့စည်းပုံကျသော အချက်အလက်မရှိပါ။");
+                return;
+            }
+
+            const csvContent = convertToCsv(structuredData);
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', `${APP_ID}_extracted_data.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+          };
+          
+          const getTableHeaders = () => {
+            let headersSet = new Set();
+            structuredData.forEach(obj => {
+                Object.keys(obj).forEach(key => headersSet.add(key));
+            });
+            
+            const requiredHeaders = ['Date', 'Time'];
+            const otherHeaders = Array.from(headersSet).filter(h => !requiredHeaders.includes(h)).sort();
+            return requiredHeaders.concat(otherHeaders);
+          }
+
+          const headers = getTableHeaders();
+
+
+          return (
+            <div className="min-h-screen bg-gray-50 p-4 sm:p-6 font-sans">
+              <div className="max-w-6xl mx-auto">
+                <header className="text-center py-6 bg-white shadow-md rounded-xl mb-6">
+                  <h1 className="text-3xl font-extrabold text-indigo-700 flex items-center justify-center">
+                    <FileText size={32} className="text-yellow-500 mr-2 transform -rotate-3" />
+                    OCR CSV ထုတ်ယူမှု - ${APP_ID}
+                  </h1>
+                  <p className="text-gray-500 mt-1">
+                    စကရင်ရှော့မှ ဖွဲ့စည်းပုံကျသော အချက်အလက်များကို CSV အဖြစ် ထုတ်ယူခြင်း
+                  </p>
+                </header>
+
+                <div className="bg-white p-6 rounded-xl shadow-lg">
+                  
+                  {/* အမှားပြသမှု */}
+                  {error && (
+                    <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4 rounded-lg flex items-center">
+                      <XCircle className="w-5 h-5 mr-3" />
+                      <p>{error}</p>
+                    </div>
+                  )}
+
+                  {/* ပုံထည့်သွင်းမှုနှင့် လုပ်ဆောင်ချက် ကဏ္ဍ */}
+                  <div className="flex flex-col sm:flex-row gap-6 mb-8">
+                    <div className="flex-1">
+                      <h2 className="text-xl font-semibold text-gray-700 mb-3 border-b pb-2">
+                        ၁။ ပုံ ရွေးချယ်ပြီး စကင်န်ဖတ်ခြင်း
+                      </h2>
+                      <label 
+                        className={`flex flex-col items-center justify-center p-6 border-4 border-dashed rounded-lg cursor-pointer transition duration-300 h-full
+                          ${image ? 'border-green-400 bg-green-50' : 'border-indigo-300 bg-indigo-50 hover:border-indigo-500'}`}
+                      >
+                        <Upload className="w-10 h-10 text-indigo-500 mb-2" />
+                        <span className="text-gray-600 text-center">
+                          စကရင်ရှော့ ပုံကို ဤနေရာတွင် နှိပ်၍ ရွေးပါ
+                        </span>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          className="hidden" 
+                          onChange={handleImageChange} 
+                        />
+                      </label>
+
+                      {image && (
+                        <div className="mt-4 p-3 border rounded-lg bg-white shadow-inner">
+                          <h3 className="text-lg font-medium text-gray-700 mb-2">
+                            ရွေးချယ်ထားသော ပုံ
+                          </h3>
+                          <img 
+                            src={image} 
+                            alt="Selected Screenshot" 
+                            className="max-w-full h-auto rounded-lg shadow-md border" 
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex-1 flex flex-col justify-between">
+                        <div>
+                            <h2 className="text-xl font-semibold text-gray-700 mb-3 border-b pb-2">
+                                ၂။ OCR လုပ်ဆောင်မှု
+                            </h2>
+                            <button
+                                onClick={handleRecognize}
+                                disabled={!image || isProcessing || !isWorkerReady}
+                                className={`w-full py-3 px-4 rounded-lg text-white font-bold text-lg shadow-md transition duration-300 transform 
+                                ${!image || isProcessing || !isWorkerReady 
+                                    ? 'bg-gray-400 cursor-not-allowed' 
+                                    : 'bg-indigo-600 hover:bg-indigo-700 active:scale-95'}`}
+                            >
+                                {isProcessing ? (
+                                    <span className="flex items-center justify-center">
+                                    <Loader2 className="animate-spin mr-3" size={20} />
+                                    {`ထုတ်ယူနေသည်... (${progress}%)`}
+                                    </span>
+                                ) : isWorkerReady ? (
+                                    'စာသား ထုတ်ယူရန် စတင်ပါ'
+                                ) : (
+                                    'စနစ် စတင်နေသည်...'
+                                )}
+                            </button>
+                            
+                            {isProcessing && (
+                                <div className="mt-4">
+                                    <div className="w-full bg-gray-200 rounded-full h-2.5">
+                                        <div 
+                                            className="bg-indigo-600 h-2.5 rounded-full transition-all duration-500" 
+                                            style={{ width: `${progress}%` }}
+                                        ></div>
+                                    </div>
+                                    <p className="text-center text-sm mt-1 text-indigo-600">
+                                        လုပ်ဆောင်မှု: {progress}%
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                        
+                        {structuredData.length > 0 && (
+                            <div className="mt-6">
+                                <h2 className="text-xl font-semibold text-gray-700 mb-3 border-b pb-2">
+                                    ၃။ CSV ထုတ်ယူခြင်း
+                                </h2>
+                                <button
+                                    onClick={handleDownloadCsv}
+                                    className="w-full py-3 px-4 rounded-lg text-white font-bold text-lg shadow-md bg-green-600 hover:bg-green-700 transition transform active:scale-95 flex items-center justify-center"
+                                >
+                                    <FileSpreadsheet className="w-6 h-6 mr-2" />
+                                    CSV (.csv) ဖိုင်အဖြစ် Download
+                                </button>
+                                <p className="text-sm text-gray-500 mt-2 text-center">
+                                    Excel တွင် ချက်ချင်း ဖွင့်နိုင်ပါသည်။
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                  </div>
+                  
+                  {/* ဇယား ရလဒ် ကဏ္ဍ */}
+                  {structuredData.length > 0 && (
+                    <div className="mt-8">
+                      <h2 className="text-xl font-semibold text-gray-700 mb-3 border-b pb-2">
+                        ဖွဲ့စည်းပုံကျသော အချက်အလက်များ၏ ဇယားကွက်
+                      </h2>
+                      <div className="overflow-x-auto bg-gray-50 rounded-lg border shadow-inner">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-indigo-100 sticky top-0">
+                            <tr>
+                              {headers.map(header => (
+                                <th 
+                                  key={header} 
+                                  className="px-6 py-3 text-left text-xs font-medium text-indigo-700 uppercase tracking-wider whitespace-nowrap"
+                                >
+                                  {header}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {structuredData.map((row, index) => (
+                              <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                                {headers.map(header => (
+                                  <td 
+                                    key={header} 
+                                    className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900"
+                                  >
+                                    {row[header] || '-'}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* မူရင်း OCR စာသား (Debugging အတွက်) */}
+                  <div className="mt-8">
+                    <h2 className="text-xl font-semibold text-gray-700 mb-3 border-b pb-2">
+                      ၄။ မူရင်း OCR ထုတ်ယူရရှိသော စာသား (Debugging အတွက်)
+                    </h2>
+                    <textarea
+                      readOnly
+                      value={ocrResult || (isProcessing ? "ထုတ်ယူနေဆဲ..." : "ဤနေရာတွင် မူရင်း OCR ရလဒ် ပေါ်လာပါမည်။")}
+                      rows={5}
+                      className="w-full p-4 border-2 border-gray-300 rounded-lg bg-gray-100 font-mono text-xs resize-none"
+                    />
+                  </div>
+                </div>
+                
+                <footer className="text-center mt-8 text-gray-400 text-sm">
+                  <p>Self-Contained Build Script နှင့် GitHub Actions ဖြင့် တည်ဆောက်ထားသော Hybrid Mobile App</p>
+                </footer>
+              </div>
+            </div>
+          );
+        };
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
