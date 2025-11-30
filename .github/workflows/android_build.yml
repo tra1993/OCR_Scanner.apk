@@ -21,8 +21,9 @@ jobs:
           sudo apt install -y nodejs npm default-jdk zip 
           
       - name: ၃။ Self-Contained APK Build Tool ကို စနစ်ထည့်သွင်းခြင်း
-        # build_apk.sh ကို Execute လုပ်ရန် ခွင့်ပြုချက် ပေးခြင်း
-        chmod +x build_apk.sh
+        run: |
+          # build_apk.sh ကို Execute လုပ်ရန် ခွင့်ပြုချက် ပေးခြင်း (YAML error fix)
+          chmod +x build_apk.sh
           
       - name: ၄။ Self-Contained Script ဖြင့် APK ဖိုင်ကို တည်ဆောက်ခြင်း
         run: ./build_apk.sh
